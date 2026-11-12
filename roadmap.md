@@ -1,0 +1,3 @@
+- [ ] Create private profile and interest/work/task/progress/note schema in Lovable Cloud.
+- [ ] Build account access, a dark workspace, hierarchy navigation, daily progress editing, and topic-linked notes.
+- [ ] Verify the app’s main screen, sign-in states, progress editing, notes, mobile layout, tests, build, and repository status.

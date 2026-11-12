@@ -28,3 +28,8 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Application architecture
+
+- Keep account-owned workspace records in public tables protected by owner-scoped RLS; model the work hierarchy as interests → work topics → parent-linked tasks, with dated topic progress and topic-linked notes.
+- Implement browser-driven Cloud Auth sign-in and use authenticated, validated TanStack server functions for every private workspace query and write.
