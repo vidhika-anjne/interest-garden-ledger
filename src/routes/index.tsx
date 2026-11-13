@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createFileRoute, useNavigate, type ErrorComponentProps } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { ArrowDownUp, ArrowLeft, ArrowRight, BookOpen, Check, ChevronDown, ChevronRight, Circle, CircleCheck, Clock3, Command, Compass, FileText, Folder, Layers3, LogOut, Menu, MoreHorizontal, Plus, Search, Sparkles, Target, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -19,12 +20,10 @@ import {
   saveNote,
   setTaskCompletion,
   updateDisplayName,
-  workspaceQueryOptions,
 } from "@/lib/workspace.functions";
 import { calculateCompletion } from "@/lib/progress";
 
 export const Route = createFileRoute("/")({
-  loader: ({ context }) => context.queryClient.ensureQueryData(workspaceQueryOptions()),
   head: () => ({
     meta: [
       { title: "Stillwork — your interests, in view" },
@@ -35,8 +34,8 @@ export const Route = createFileRoute("/")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: WorkspaceRoute,
-  errorComponent: WorkspaceError,
+  component: WorkspaceGate,
+  errorComponent: ({ error, reset }) => <WorkspaceError error={error} reset={reset} />,
   notFoundComponent: () => <main className="min-h-screen bg-background p-12 text-foreground">This page is unavailable.</main>,
 });
 
@@ -65,8 +64,50 @@ const currentDate = () => {
 const displayDate = (value: string) =>
   new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date(`${value}T12:00:00`));
 
-function WorkspaceRoute() {
-  const { data } = useSuspenseQuery(workspaceQueryOptions());
+function WorkspaceGate() {
+  const sessionQuery = useQuery({
+    queryKey: ["auth-session"],
+    queryFn: async () => {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      return data.session;
+    },
+    staleTime: Infinity,
+  });
+  const session = sessionQuery.data;
+  const fetchWorkspace = useServerFn(getWorkspace);
+  const workspaceQuery = useQuery({
+    queryKey: ["workspace", session?.user.id],
+    queryFn: () => fetchWorkspace(),
+    enabled: Boolean(session?.user.id),
+  });
+
+  if (sessionQuery.isPending) {
+    return <WorkspaceLoading />;
+  }
+  if (sessionQuery.error) {
+    return <WorkspaceError error={sessionQuery.error} reset={() => void sessionQuery.refetch()} />;
+  }
+  if (!session) {
+    return <WorkspaceError error={new Error("Unauthorized: No authorization header provided")} reset={() => {}} />;
+  }
+  if (workspaceQuery.isPending) {
+    return <WorkspaceLoading />;
+  }
+  if (workspaceQuery.error) {
+    return <WorkspaceError error={workspaceQuery.error} reset={() => void workspaceQuery.refetch()} />;
+  }
+  if (!workspaceQuery.data) {
+    return <WorkspaceLoading />;
+  }
+  return <WorkspaceRoute data={workspaceQuery.data} />;
+}
+
+function WorkspaceLoading() {
+  return <main className="grid min-h-screen place-items-center bg-background text-sm text-muted-foreground" aria-live="polite">Opening your workspace…</main>;
+}
+
+function WorkspaceRoute({ data }: { data: Workspace }) {
   const [activeInterestId, setActiveInterestId] = useState<string | null>(null);
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel>("work");
@@ -104,15 +145,15 @@ function WorkspaceRoute() {
   const topicOptions = (topicId: string | null | undefined) => ({ data: { topicId: topicId ?? "", name: "", description: "" } });
   void topicOptions;
 
-  const mutation = (fn: (...args: never[]) => Promise<unknown>, message: string) =>
+  const mutation = <TVariables,>(fn: (variables: TVariables) => Promise<unknown>, message: string) =>
     useMutation({ mutationFn: fn, onSuccess: () => { void refresh(); toast.success(message); }, onError: (error) => toast.error(error instanceof Error ? error.message : "Please try again.") });
-  const createInterestMutation = mutation(createInterest as (...args: never[]) => Promise<unknown>, "Interest created");
-  const createTopicMutation = mutation(createWorkTopic as (...args: never[]) => Promise<unknown>, "Work topic created");
-  const createTaskMutation = mutation(createTask as (...args: never[]) => Promise<unknown>, "Task created");
-  const completeMutation = mutation(setTaskCompletion as (...args: never[]) => Promise<unknown>, "Task updated");
-  const progressMutation = mutation(saveDailyProgress as (...args: never[]) => Promise<unknown>, "Daily progress saved");
-  const noteMutation = mutation(saveNote as (...args: never[]) => Promise<unknown>, "Note saved");
-  const profileMutation = mutation(updateDisplayName as (...args: never[]) => Promise<unknown>, "Profile updated");
+  const createInterestMutation = mutation(createInterest, "Interest created");
+  const createTopicMutation = mutation(createWorkTopic, "Work topic created");
+  const createTaskMutation = mutation(createTask, "Task created");
+  const completeMutation = mutation(setTaskCompletion, "Task updated");
+  const progressMutation = mutation(saveDailyProgress, "Daily progress saved");
+  const noteMutation = mutation(saveNote, "Note saved");
+  const profileMutation = mutation(updateDisplayName, "Profile updated");
   const deleteMutation = useMutation({ mutationFn: deleteWorkspaceItem, onSuccess: () => { void refresh(); toast.success("Removed"); }, onError: (error) => toast.error(error instanceof Error ? error.message : "Please try again.") });
 
   const signOut = async () => {
@@ -131,7 +172,10 @@ function WorkspaceRoute() {
   };
 
   const submitNote = () => {
-    if (!noteDraft || !selectedTopic || !noteDraft.title.trim()) return toast.error("Give your note a title first.");
+    if (!noteDraft || !selectedTopic || !noteDraft.title.trim()) {
+      toast.error("Give your note a title first.");
+      return;
+    }
     noteMutation.mutate({ data: { noteId: noteDraft.id, topicId: selectedTopic.id, taskId: noteDraft.taskId, title: noteDraft.title.trim(), content: noteDraft.content } });
     setNoteDraft(null);
   };
@@ -140,7 +184,10 @@ function WorkspaceRoute() {
   const runProgressSave = () => {
     if (!selectedTopic) return;
     const next = Number(progressDraft);
-    if (!Number.isFinite(next) || next < 0 || next > 100) return toast.error("Progress must be between 0 and 100%.");
+    if (!Number.isFinite(next) || next < 0 || next > 100) {
+      toast.error("Progress must be between 0 and 100%.");
+      return;
+    }
     progressMutation.mutate({ data: { topicId: selectedTopic.id, date: selectedDate, percent: next, note: progressNote.trim() } });
     setProgressEditOpen(false);
   };

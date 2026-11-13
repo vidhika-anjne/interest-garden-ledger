@@ -33,3 +33,4 @@ use the editor.
 
 - Keep account-owned workspace records in public tables protected by owner-scoped RLS; model the work hierarchy as interests → work topics → parent-linked tasks, with dated topic progress and topic-linked notes.
 - Implement browser-driven Cloud Auth sign-in and use authenticated, validated TanStack server functions for every private workspace query and write.
+- Keep auth-state listening in the root route and share session updates through the query client so public auth screens never fetch private workspace data before sign-in.
