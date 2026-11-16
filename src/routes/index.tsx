@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, useNavigate, type ErrorComponentProps } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowDownUp, ArrowLeft, ArrowRight, BookOpen, Check, ChevronDown, ChevronRight, Circle, CircleCheck, Clock3, Command, Compass, FileText, Folder, Layers3, LogOut, Menu, MoreHorizontal, Plus, Search, Sparkles, Target, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -46,14 +46,18 @@ type Task = Workspace["tasks"][number];
 type Note = Workspace["notes"][number];
 type Panel = "work" | "notes" | "progress";
 
-const palette: Record<string, { dot: string; text: string; bar: string; soft: string }> = {
+const palette = {
   mint: { dot: "bg-mint", text: "text-mint", bar: "bg-mint", soft: "bg-mint/10" },
   coral: { dot: "bg-coral", text: "text-coral", bar: "bg-coral", soft: "bg-coral/10" },
   blue: { dot: "bg-soft-blue", text: "text-soft-blue", bar: "bg-soft-blue", soft: "bg-soft-blue/10" },
   gold: { dot: "bg-gold", text: "text-gold", bar: "bg-gold", soft: "bg-gold/10" },
   rose: { dot: "bg-rose", text: "text-rose", bar: "bg-rose", soft: "bg-rose/10" },
   lime: { dot: "bg-lime", text: "text-lime", bar: "bg-lime", soft: "bg-lime/10" },
-};
+} satisfies Record<string, { dot: string; text: string; bar: string; soft: string }>;
+
+function getPaletteStyle(color: string) {
+  return palette[color as keyof typeof palette] ?? palette.mint;
+}
 
 const paletteChoices = ["mint", "coral", "blue", "gold", "rose", "lime"] as const;
 const currentDate = () => {
@@ -198,13 +202,19 @@ function WorkspaceRoute({ data }: { data: Workspace }) {
     createInterestMutation.mutate({ data: { name: name.trim(), description: "", color: paletteChoices[data.interests.length % paletteChoices.length] } });
   };
   const onAddTopic = () => {
-    if (!selectedInterest) return toast.error("Add an interest before creating work topics.");
+    if (!selectedInterest) {
+      toast.error("Add an interest before creating work topics.");
+      return;
+    }
     const name = window.prompt(`New work topic in ${selectedInterest.name}`);
     if (!name?.trim()) return;
     createTopicMutation.mutate({ data: { interestId: selectedInterest.id, name: name.trim(), description: "" } });
   };
   const onAddTask = (parentId: string | null = null) => {
-    if (!selectedTopic) return toast.error("Select a work topic first.");
+    if (!selectedTopic) {
+      toast.error("Select a work topic first.");
+      return;
+    }
     const title = window.prompt(parentId ? "Name this subtask" : "Name this task");
     if (!title?.trim()) return;
     createTaskMutation.mutate({ data: { topicId: selectedTopic.id, title: title.trim(), description: "", parentId } });
@@ -268,7 +278,7 @@ function WorkspaceRoute({ data }: { data: Workspace }) {
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
           {data.interests.length === 0 && !collapsed ? <div className="px-3 py-5 text-xs leading-5 text-muted-foreground">Your interests will live here. Add the first one when you’re ready.</div> : null}
           {sortedInterests.map((interest, index) => {
-            const style = palette[interest.color] ?? paletteChoices[index % paletteChoices.length];
+            const style = getPaletteStyle(interest.color ?? paletteChoices[index % paletteChoices.length] ?? "mint");
             const topicsForInterest = data.topics.filter((topic) => topic.interest_id === interest.id);
             const isActiveInterest = interest.id === selectedInterest?.id;
             return (
@@ -322,7 +332,7 @@ function WorkspaceRoute({ data }: { data: Workspace }) {
           {panel === "work" ? <>
             <section className="mb-10 flex flex-wrap items-end justify-between gap-6">
               <div>
-                <div className="mb-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground"><span className={`h-[7px] w-[7px] rounded-full ${selectedInterest ? (palette[selectedInterest.color] ?? palette.mint).dot : "bg-mint"}`} />{selectedInterest?.name ?? "Your space"}</div>
+                <div className="mb-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground"><span className={`h-[7px] w-[7px] rounded-full ${selectedInterest ? getPaletteStyle(selectedInterest.color).dot : "bg-mint"}`} />{selectedInterest?.name ?? "Your space"}</div>
                 <h1 className="max-w-[820px] break-words text-[32px] font-semibold leading-[1.13] tracking-normal sm:text-[38px]">{selectedTopic?.name ?? "Make room for what matters."}</h1>
                 <p className="mt-3 max-w-2xl text-[13px] leading-6 text-muted-foreground">{selectedTopic?.description || (selectedInterest ? `A little progress, made visible — for ${selectedInterest.name.toLowerCase()}.` : "Bring your interests and everyday work into one considered place.")}</p>
               </div>
@@ -349,9 +359,9 @@ function WorkspaceRoute({ data }: { data: Workspace }) {
               <section>
                 <div className="mb-3 flex items-center justify-between border-b border-border/70 pb-4">
                   <div><h2 className="text-[15px] font-semibold">Tasks</h2><p className="mt-1 text-[11px] text-muted-foreground">{topTasks.length} {topTasks.length === 1 ? "task" : "tasks"} · {completedTasks} complete</p></div>
-                  <Button variant="ghost" size="sm" className="h-8 text-muted-foreground" onClick={onAddTask}><Plus /> Add task</Button>
+                  <Button variant="ghost" size="sm" className="h-8 text-muted-foreground" onClick={() => onAddTask()}><Plus /> Add task</Button>
                 </div>
-                {topTasks.length ? topTasks.map((task) => renderTask(task)) : <div className="py-14 text-center"><span className="mx-auto mb-4 grid h-10 w-10 place-items-center rounded-[10px] border border-border text-muted-foreground"><CircleCheck className="h-4 w-4" /></span><p className="text-[13px] text-foreground">A good place to begin.</p><p className="mt-1 text-[11px] text-muted-foreground">Add a task to give this topic its first step.</p><Button variant="outline" size="sm" className="mt-4" onClick={onAddTask}><Plus /> Add a task</Button></div>}
+                  {topTasks.length ? topTasks.map((task) => renderTask(task)) : <div className="py-14 text-center"><span className="mx-auto mb-4 grid h-10 w-10 place-items-center rounded-[10px] border border-border text-muted-foreground"><CircleCheck className="h-4 w-4" /></span><p className="text-[13px] text-foreground">A good place to begin.</p><p className="mt-1 text-[11px] text-muted-foreground">Add a task to give this topic its first step.</p><Button variant="outline" size="sm" className="mt-4" onClick={() => onAddTask()}><Plus /> Add a task</Button></div>}
               </section>
 
               <aside className="space-y-10">
@@ -359,8 +369,8 @@ function WorkspaceRoute({ data }: { data: Workspace }) {
                   <div className="mb-4 flex items-center justify-between"><div><h2 className="text-[13px] font-semibold">Today’s progress</h2><p className="mt-1 text-[10px] text-muted-foreground">{displayDate(selectedDate)}</p></div><Button variant="ghost" size="icon" title="Edit daily progress" aria-label="Edit daily progress" className="h-8 w-8 text-muted-foreground" onClick={() => { setProgressDraft(String(topicProgress)); setProgressNote(dailyLog?.note ?? ""); setProgressEditOpen((value) => !value); }}><ArrowDownUp /></Button></div>
                   <div className="relative h-[106px] overflow-hidden border border-border/80 bg-surface/60 px-4 py-3">
                     <svg viewBox="0 0 280 76" preserveAspectRatio="none" className="absolute inset-x-3 bottom-3 h-[76px] w-[calc(100%-24px)]" aria-hidden="true">
-                      <path d="M0 66 C25 64, 38 52, 56 54 S91 37, 111 43 S144 30, 165 34 S195 18, 218 26 S253 15, 280 9 L280 76 L0 76 Z" className={(palette[selectedInterest?.color ?? "mint"] ?? palette.mint).soft} />
-                      <path d="M0 66 C25 64, 38 52, 56 54 S91 37, 111 43 S144 30, 165 34 S195 18, 218 26 S253 15, 280 9" fill="none" className={(palette[selectedInterest?.color ?? "mint"] ?? palette.mint).text} stroke="currentColor" strokeWidth="2" />
+                      <path d="M0 66 C25 64, 38 52, 56 54 S91 37, 111 43 S144 30, 165 34 S195 18, 218 26 S253 15, 280 9 L280 76 L0 76 Z" className={getPaletteStyle(selectedInterest?.color ?? "mint").soft} />
+                      <path d="M0 66 C25 64, 38 52, 56 54 S91 37, 111 43 S144 30, 165 34 S195 18, 218 26 S253 15, 280 9" fill="none" className={getPaletteStyle(selectedInterest?.color ?? "mint").text} stroke="currentColor" strokeWidth="2" />
                     </svg>
                     <div className="relative flex items-start justify-between"><span className="text-[10px] text-muted-foreground">This work topic</span><span className="text-[26px] font-semibold tabular-nums">{topicProgress}<span className="ml-0.5 text-[13px] font-normal text-muted-foreground">%</span></span></div>
                   </div>
@@ -393,7 +403,7 @@ function WorkspaceRoute({ data }: { data: Workspace }) {
               <Textarea aria-label="Note content" maxLength={20000} rows={6} value={noteDraft.content} onChange={(event) => setNoteDraft({ ...noteDraft, content: event.target.value })} placeholder="Let the thought unfold…" className="resize-y border-0 bg-transparent px-0 text-[13px] leading-7 shadow-none focus-visible:ring-0" />
               <div className="flex justify-end gap-2"><Button variant="ghost" onClick={() => setNoteDraft(null)}>Cancel</Button><Button disabled={noteMutation.isPending} onClick={submitNote}>Save note</Button></div>
             </div> : null}
-            {visibleNotes.length ? <div className="max-w-[800px]">{visibleNotes.map((note) => { const topic = data.topics.find((item) => item.id === note.work_topic_id); const interest = data.interests.find((item) => item.id === topic?.interest_id); return <article key={note.id} className="group flex gap-4 border-b border-border/70 py-5"><span className={`mt-1 h-[7px] w-[7px] shrink-0 rounded-full ${(palette[interest?.color ?? "mint"] ?? palette.mint).dot}`} /><button onClick={() => createNote(note)} className="min-w-0 flex-1 text-left"><div className="flex flex-wrap items-center gap-2"><h2 className="break-words text-[14px] font-medium group-hover:text-mint">{note.title}</h2><span className="text-[10px] text-muted-foreground">{topic?.name ?? "Topic removed"}</span></div><p className="mt-2 whitespace-pre-wrap break-words text-[12px] leading-6 text-muted-foreground">{note.content || "No additional context yet."}</p><p className="mt-2 text-[10px] text-muted-foreground">{new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(note.updated_at))}{interest ? ` · ${interest.name}` : ""}</p></button><Button variant="ghost" size="icon" aria-label={`Delete ${note.title}`} className="h-8 w-8 shrink-0 self-start text-muted-foreground opacity-0 group-hover:opacity-100" onClick={() => deleteMutation.mutate({ data: { kind: "note", id: note.id } })}><Trash2 /></Button></article>; })}</div> : !noteDraft ? <div className="border-y border-dashed border-border py-16 text-center"><BookOpen className="mx-auto h-5 w-5 text-muted-foreground" /><h2 className="mt-3 text-[13px] font-medium">{search ? "No notes match that search." : "A quiet page, for now."}</h2><p className="mt-2 text-[11px] text-muted-foreground">{search ? "Try a different word or topic." : "Save a thought beside the work it belongs to."}</p>{!search ? <Button variant="outline" size="sm" className="mt-4" onClick={() => createNote()}><Plus /> Write a note</Button> : null}</div> : null}
+            {visibleNotes.length ? <div className="max-w-[800px]">{visibleNotes.map((note) => { const topic = data.topics.find((item) => item.id === note.work_topic_id); const interest = data.interests.find((item) => item.id === topic?.interest_id); return <article key={note.id} className="group flex gap-4 border-b border-border/70 py-5"><span className={`mt-1 h-[7px] w-[7px] shrink-0 rounded-full ${getPaletteStyle(interest?.color ?? "mint").dot}`} /><button onClick={() => createNote(note)} className="min-w-0 flex-1 text-left"><div className="flex flex-wrap items-center gap-2"><h2 className="break-words text-[14px] font-medium group-hover:text-mint">{note.title}</h2><span className="text-[10px] text-muted-foreground">{topic?.name ?? "Topic removed"}</span></div><p className="mt-2 whitespace-pre-wrap break-words text-[12px] leading-6 text-muted-foreground">{note.content || "No additional context yet."}</p><p className="mt-2 text-[10px] text-muted-foreground">{new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(note.updated_at))}{interest ? ` · ${interest.name}` : ""}</p></button><Button variant="ghost" size="icon" aria-label={`Delete ${note.title}`} className="h-8 w-8 shrink-0 self-start text-muted-foreground opacity-0 group-hover:opacity-100" onClick={() => deleteMutation.mutate({ data: { kind: "note", id: note.id } })}><Trash2 /></Button></article>; })}</div> : !noteDraft ? <div className="border-y border-dashed border-border py-16 text-center"><BookOpen className="mx-auto h-5 w-5 text-muted-foreground" /><h2 className="mt-3 text-[13px] font-medium">{search ? "No notes match that search." : "A quiet page, for now."}</h2><p className="mt-2 text-[11px] text-muted-foreground">{search ? "Try a different word or topic." : "Save a thought beside the work it belongs to."}</p>{!search ? <Button variant="outline" size="sm" className="mt-4" onClick={() => createNote()}><Plus /> Write a note</Button> : null}</div> : null}
           </section> : null}
         </div>
       </main>
@@ -420,11 +430,11 @@ function ProgressPanel({ data, selectedDate, setSelectedDate, selectTopic }: { d
     <div className="mb-9 flex flex-wrap items-end justify-between gap-5"><div><div className="mb-3 flex items-center gap-2 text-[11px] uppercase tracking-[0.12em] text-muted-foreground"><Target className="h-3.5 w-3.5" /> Small steps count</div><h1 className="text-[34px] font-semibold leading-tight">Your progress.</h1><p className="mt-3 max-w-xl text-[13px] leading-6 text-muted-foreground">Choose a day and set the progress that feels true.</p></div><Input aria-label="Progress date" type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} className="h-10 w-[165px] text-xs" /></div>
     <div className="mb-8 flex flex-wrap items-end justify-between gap-5 border-y border-border py-6"><div><p className="text-[11px] text-muted-foreground">{displayDate(selectedDate)}</p><div className="mt-2 text-[30px] font-medium tabular-nums">{avg}<span className="ml-1 text-sm text-muted-foreground">%</span></div><p className="mt-1 text-[11px] text-muted-foreground">Average across {byDate.length} topics with saved progress</p></div><div className="w-full max-w-[450px]"><div className="mb-2 flex justify-between text-[10px] text-muted-foreground"><span>Today, across your work</span><span>{avg}%</span></div><div className="h-[7px] overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-mint transition-[width]" style={{ width: `${avg}%` }} /></div></div></div>
     <h2 className="mb-2 text-[14px] font-semibold">Each work topic</h2>
-    {data.topics.length ? <div className="max-w-[900px]">{data.topics.map((topic) => { const interest = data.interests.find((item) => item.id === topic.interest_id); const entry = byDate.find((item) => item.work_topic_id === topic.id); const topicTasks = data.tasks.filter((task) => task.work_topic_id === topic.id); const completed = topicTasks.filter((task) => task.is_complete).length; const percent = entry?.progress_percent ?? calculateCompletion(completed, topicTasks.length); return <button key={topic.id} onClick={() => selectTopic(topic)} className="group flex w-full items-center gap-4 border-b border-border/65 py-4 text-left"><span className={`h-[7px] w-[7px] shrink-0 rounded-full ${(palette[interest?.color ?? "mint"] ?? palette.mint).dot}`} /><span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium group-hover:text-mint">{topic.name}</span><span className="mt-1 block truncate text-[10px] text-muted-foreground">{interest?.name ?? "Interest"}{entry?.note ? ` · ${entry.note}` : ""}</span></span><span className="hidden w-32 sm:block"><span className="block h-[5px] overflow-hidden rounded-full bg-muted"><span className={`block h-full rounded-full ${(palette[interest?.color ?? "mint"] ?? palette.mint).bar}`} style={{ width: `${percent}%` }} /></span></span><span className="w-10 text-right text-[12px] tabular-nums">{percent}%</span><ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" /></button>; })}</div> : <p className="border-y border-dashed border-border py-10 text-[12px] text-muted-foreground">Progress by work topic appears here as you create work.</p>}
+    {data.topics.length ? <div className="max-w-[900px]">{data.topics.map((topic) => { const interest = data.interests.find((item) => item.id === topic.interest_id); const entry = byDate.find((item) => item.work_topic_id === topic.id); const topicTasks = data.tasks.filter((task) => task.work_topic_id === topic.id); const completed = topicTasks.filter((task) => task.is_complete).length; const percent = entry?.progress_percent ?? calculateCompletion(completed, topicTasks.length); return <button key={topic.id} onClick={() => selectTopic(topic)} className="group flex w-full items-center gap-4 border-b border-border/65 py-4 text-left"><span className={`h-[7px] w-[7px] shrink-0 rounded-full ${getPaletteStyle(interest?.color ?? "mint").dot}`} /><span className="min-w-0 flex-1"><span className="block truncate text-[12px] font-medium group-hover:text-mint">{topic.name}</span><span className="mt-1 block truncate text-[10px] text-muted-foreground">{interest?.name ?? "Interest"}{entry?.note ? ` · ${entry.note}` : ""}</span></span><span className="hidden w-32 sm:block"><span className="block h-[5px] overflow-hidden rounded-full bg-muted"><span className={`block h-full rounded-full ${getPaletteStyle(interest?.color ?? "mint").bar}`} style={{ width: `${percent}%` }} /></span></span><span className="w-10 text-right text-[12px] tabular-nums">{percent}%</span><ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" /></button>; })}</div> : <p className="border-y border-dashed border-border py-10 text-[12px] text-muted-foreground">Progress by work topic appears here as you create work.</p>}
   </section>;
 }
 
-function WorkspaceError({ error, reset }: { error: Error; reset: () => void }) {
+function WorkspaceError({ error, reset }: { error: unknown; reset: () => void }) {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -432,7 +442,8 @@ function WorkspaceError({ error, reset }: { error: Error; reset: () => void }) {
   const [busy, setBusy] = useState(false);
   const [confirmationSent, setConfirmationSent] = useState(false);
   const [authError, setAuthError] = useState("");
-  const isAuthError = /unauthorized|no authorization|invalid token|auth session missing/i.test(error.message);
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  const isAuthError = /unauthorized|no authorization|invalid token|auth session missing/i.test(errorMessage);
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setAuthError(""); setBusy(true);
     try {

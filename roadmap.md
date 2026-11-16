@@ -1,3 +1,4 @@
-- [ ] Create private profile and interest/work/task/progress/note schema in Lovable Cloud.
-- [ ] Build account access, a dark workspace, hierarchy navigation, daily progress editing, and topic-linked notes.
-- [ ] Verify the public sign-in screen and signed-in workspace, progress editing, notes, mobile layout, tests, build, and repository status.
+- [x] Create private profile and interest/work/task/progress/note schema in Lovable Cloud.
+- [x] Build account access, a dark workspace, hierarchy navigation, daily progress editing, and topic-linked notes.
+- [x] Verify the public sign-in screen, type checking, focused tests, preview build, and repository status.
+- [ ] Verify signed-in workspace data, progress editing, notes, and mobile layout; requires a signed-in account session.
